@@ -338,7 +338,16 @@ private class TableViewColumnInfo(
     }
 
     private fun parseDateTime(raw: String): Long {
-        return OffsetDateTime.parse(raw).toInstant().toEpochMilli();
+        // If the DateTime ends with a Z or a time zone (e.g. +00:00), parse it
+        // If not, assume that it is in UTC (per SQLite convention) and append a Z before parsing it
+        val pattern = Pattern.compile(".*(\\+\\d{2}:\\d{2}|Z)$");
+        return if (pattern.matcher(raw).find()) {
+            // Already correctly formatted
+            OffsetDateTime.parse(raw).toInstant().toEpochMilli();
+        } else {
+            // Not correctly formatted yet, append a Z to treat it as UTC
+            OffsetDateTime.parse(raw+"Z").toInstant().toEpochMilli();
+        }
     }
 
     override fun isCellEditable(item: TableRow): Boolean {
