@@ -32,6 +32,8 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.io.File
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.swing.DefaultCellEditor
 import javax.swing.ListSelectionModel
@@ -100,11 +102,18 @@ class CustomDataTableView(
     }
 
     fun updateData(newRows: List<TableRow>) {
-        val helper = ListUpdateHelper(TableModelDiffUtilDispatchModel(internalModel), TableRowComparator(table!!))
+        val helper = ListUpdateHelper(
+            TableModelDiffUtilDispatchModel(internalModel),
+            TableRowComparator(table!!)
+        )
         helper.onListUpdated(newRows)
     }
 
-    fun updateModel(databaseName: String, table: SQLTableDefinition, dateTimeFormat: SQLDateTimeFormat) {
+    fun updateModel(
+        databaseName: String,
+        table: SQLTableDefinition,
+        dateTimeFormat: SQLDateTimeFormat
+    ) {
         this.databaseName = databaseName
         this.table = table
         this.dateTimeFormat = dateTimeFormat
@@ -117,7 +126,8 @@ class CustomDataTableView(
         val newActiveColumns = if (columns.isEmpty()) {
             table?.columns.orEmpty()
         } else {
-            val newColumns = table?.columns?.filter { it.name in columns }.orEmpty()
+            val newColumns =
+                table?.columns?.filter { it.name in columns }.orEmpty()
             if (newColumns.isEmpty()) {
                 columns.map {
                     SQLColumnDefinition(
@@ -141,15 +151,22 @@ class CustomDataTableView(
     }
 
     private fun createTableColumnModel() {
-        val tableConfiguration = StorageInspectorProjectSettings.instance(project).state.configuration?.databases?.find {
-            it.databaseName == databaseName
-        }?.configuration?.find {
-            it.tableName == table!!.name
-        }
+        val tableConfiguration =
+            StorageInspectorProjectSettings.instance(project).state.configuration?.databases?.find {
+                it.databaseName == databaseName
+            }?.configuration?.find {
+                it.tableName == table!!.name
+            }
 
         val model = ListTableModel(
             activeColumns.map {
-                TableViewColumnInfo(project, it, ::doEditValue, ::saveBinary, dateTimeFormat!!)
+                TableViewColumnInfo(
+                    project,
+                    it,
+                    ::doEditValue,
+                    ::saveBinary,
+                    dateTimeFormat!!
+                )
             }.toTypedArray(),
             listOf(emptyMap<String, Any?>()),
             0
@@ -161,14 +178,15 @@ class CustomDataTableView(
 
         if (tableConfiguration != null) {
             activeColumns.forEachIndexed { index, col ->
-                tableConfiguration.columns.find { it.columnName == col.name }?.let { columnConfig ->
-                    if (index < columnModel.columnCount) {
-                        val column = columnModel.getColumn(index)
-                        column.minWidth = 15
-                        column.maxWidth = Integer.MAX_VALUE
-                        column.preferredWidth = columnConfig.width
+                tableConfiguration.columns.find { it.columnName == col.name }
+                    ?.let { columnConfig ->
+                        if (index < columnModel.columnCount) {
+                            val column = columnModel.getColumn(index)
+                            column.minWidth = 15
+                            column.maxWidth = Integer.MAX_VALUE
+                            column.preferredWidth = columnConfig.width
+                        }
                     }
-                }
             }
         }
     }
@@ -223,7 +241,11 @@ class CustomDataTableView(
         return editor
     }
 
-    override fun prepareEditor(editor: TableCellEditor?, row: Int, column: Int): Component {
+    override fun prepareEditor(
+        editor: TableCellEditor?,
+        row: Int,
+        column: Int
+    ): Component {
         (editor as? DefaultCellEditor)?.clickCountToStart = 2
         return super.prepareEditor(editor, row, column)
     }
@@ -231,7 +253,8 @@ class CustomDataTableView(
     fun doRemoveSelectedRows() {
         table?.let { currentTable ->
             val queriesToExecute = selectedRows.mapNotNull { row ->
-                val data = internalModel.getRowValue(row) ?: return@mapNotNull null
+                val data =
+                    internalModel.getRowValue(row) ?: return@mapNotNull null
                 val variables = mutableListOf<ValueWithType>()
                 val query = buildString {
                     append("DELETE FROM ${currentTable.name} ")
@@ -243,7 +266,11 @@ class CustomDataTableView(
         }
     }
 
-    private fun doEditValue(row: TableRow, column: SQLColumnDefinition, newValue: Any?) {
+    private fun doEditValue(
+        row: TableRow,
+        column: SQLColumnDefinition,
+        newValue: Any?
+    ) {
         val table = table ?: return
 
         val variables = mutableListOf<ValueWithType>()
@@ -291,13 +318,27 @@ private class TableViewColumnInfo(
             } else {
                 Tr.TypeBooleanFalse.tr()
             }
-            SQLDataType.DATETIME -> applyDateTimeFix((raw as Number).toLong(), dateTimeFormat)
+
+            SQLDataType.DATETIME -> if (raw is Number)
+                applyDateTimeFix((raw as Number).toLong(), dateTimeFormat)
+            else if (raw is String && raw.toLongOrNull() != null)
+                applyDateTimeFix(raw.toLong(), dateTimeFormat)
+            else
+                parseDateTime(raw.toString())
         }
     }
 
-    private fun applyDateTimeFix(raw: Long, dateTimeFormat: SQLDateTimeFormat): Long {
-        val inMilliseconds = (raw * dateTimeFormat.accuracyInMicroSeconds) / 1000
+    private fun applyDateTimeFix(
+        raw: Long,
+        dateTimeFormat: SQLDateTimeFormat
+    ): Long {
+        val inMilliseconds =
+            (raw * dateTimeFormat.accuracyInMicroSeconds) / 1000
         return inMilliseconds - dateTimeFormat.timezoneOffsetMilliseconds
+    }
+
+    private fun parseDateTime(raw: String): Long {
+        return OffsetDateTime.parse(raw).toInstant().toEpochMilli();
     }
 
     override fun isCellEditable(item: TableRow): Boolean {
@@ -309,12 +350,22 @@ private class TableViewColumnInfo(
             SQLDataType.TEXT,
             SQLDataType.REAL,
             SQLDataType.INTEGER -> null
-            SQLDataType.BLOB -> return BinaryCellEditor { onSaveBinaryTapped(column) }
+
+            SQLDataType.BLOB -> return BinaryCellEditor {
+                onSaveBinaryTapped(
+                    column
+                )
+            }
+
             SQLDataType.BOOLEAN -> object : ComboBoxCellEditor() {
                 override fun getComboBoxItems(): List<String> {
-                    return listOf(Tr.TypeBooleanTrue.tr(), Tr.TypeBooleanFalse.tr())
+                    return listOf(
+                        Tr.TypeBooleanTrue.tr(),
+                        Tr.TypeBooleanFalse.tr()
+                    )
                 }
             }
+
             SQLDataType.DATETIME -> return DateTimeCellEditor(project) { it }
         }
     }
@@ -337,7 +388,11 @@ private class TableViewColumnInfo(
                 }
             }
         } catch (e: Throwable) {
-            NotificationUtil.error("Update failed", "Failed to update: ${e.message}", project)
+            NotificationUtil.error(
+                "Update failed",
+                "Failed to update: ${e.message}",
+                project
+            )
         }
     }
 
@@ -353,21 +408,31 @@ private class TableViewColumnInfo(
                 val new = value.toString()
                 (original == new)
             }
+
             SQLDataType.BLOB -> false
             SQLDataType.REAL -> {
-                val new = if (value is Number) value.toDouble() else (value.toString().toDouble())
+                val new =
+                    if (value is Number) value.toDouble() else (value.toString()
+                        .toDouble())
                 (original == new)
             }
+
             SQLDataType.INTEGER -> {
-                val new = if (value is Number) value.toLong() else (value.toString().toLong())
+                val new =
+                    if (value is Number) value.toLong() else (value.toString()
+                        .toLong())
                 (original == new)
             }
+
             SQLDataType.BOOLEAN -> {
-                val new = if (value is Boolean) value else (value.toString() == Tr.TypeBooleanTrue.tr() || value.toString() == "true")
+                val new =
+                    if (value is Boolean) value else (value.toString() == Tr.TypeBooleanTrue.tr() || value.toString() == "true")
                 (original == new)
             }
+
             SQLDataType.DATETIME -> {
-                val new = if (value is Long) value else (value.toString().toLong())
+                val new =
+                    if (value is Long) value else (value.toString().toLong())
                 (original == new)
             }
         }
@@ -378,14 +443,25 @@ private class TableViewColumnInfo(
     }
 }
 
-private class TableRowComparator(table: SQLTableDefinition) : DiffUtilComparator<TableRow> {
+private class TableRowComparator(table: SQLTableDefinition) :
+    DiffUtilComparator<TableRow> {
 
     private val primaryKeys = table.primaryKey
 
     override fun representSameItem(left: TableRow, right: TableRow): Boolean {
         if (primaryKeys.isEmpty()) {
-            val leftRowId = left.entries.find { it.key.equals("rowid", ignoreCase = true) }?.value
-            val rightRowId = right.entries.find { it.key.equals("rowid", ignoreCase = true) }?.value
+            val leftRowId = left.entries.find {
+                it.key.equals(
+                    "rowid",
+                    ignoreCase = true
+                )
+            }?.value
+            val rightRowId = right.entries.find {
+                it.key.equals(
+                    "rowid",
+                    ignoreCase = true
+                )
+            }?.value
             if (leftRowId != null && rightRowId != null)
                 return leftRowId == rightRowId
             return false //No rowId for one or the other -> bail
@@ -466,12 +542,36 @@ private fun makeVariable(
     }
 
     return when (column.type) {
-        SQLDataType.TEXT -> ValueWithType(StorageType.string, rawValue.toString())
-        SQLDataType.BLOB -> ValueWithType(StorageType.binary, rawValue as? ByteArray ?: asByteArray(rawValue as List<Int>))
-        SQLDataType.REAL -> ValueWithType(StorageType.double, (rawValue as? Number)?.toDouble() ?: rawValue.toString().toDouble())
-        SQLDataType.INTEGER -> ValueWithType(StorageType.int, (rawValue as? Number)?.toLong() ?: rawValue.toString().toLong())
-        SQLDataType.BOOLEAN -> ValueWithType(StorageType.bool, (rawValue as? Boolean) ?: (rawValue.toString() == "true" || rawValue.toString() == Tr.TypeBooleanTrue.tr()))
-        SQLDataType.DATETIME -> ValueWithType(StorageType.datetime, (rawValue as? Number)?.toLong() ?: rawValue.toString().toLong())
+        SQLDataType.TEXT -> ValueWithType(
+            StorageType.string,
+            rawValue.toString()
+        )
+
+        SQLDataType.BLOB -> ValueWithType(
+            StorageType.binary,
+            rawValue as? ByteArray ?: asByteArray(rawValue as List<Int>)
+        )
+
+        SQLDataType.REAL -> ValueWithType(
+            StorageType.double,
+            (rawValue as? Number)?.toDouble() ?: rawValue.toString().toDouble()
+        )
+
+        SQLDataType.INTEGER -> ValueWithType(
+            StorageType.int,
+            (rawValue as? Number)?.toLong() ?: rawValue.toString().toLong()
+        )
+
+        SQLDataType.BOOLEAN -> ValueWithType(
+            StorageType.bool,
+            (rawValue as? Boolean)
+                ?: (rawValue.toString() == "true" || rawValue.toString() == Tr.TypeBooleanTrue.tr())
+        )
+
+        SQLDataType.DATETIME -> ValueWithType(
+            StorageType.datetime,
+            (rawValue as? Number)?.toLong() ?: rawValue.toString().toLong()
+        )
     }
 }
 
