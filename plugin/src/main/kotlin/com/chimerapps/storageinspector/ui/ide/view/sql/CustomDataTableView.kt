@@ -33,8 +33,8 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.io.File
 import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.regex.Pattern
 import javax.swing.DefaultCellEditor
 import javax.swing.ListSelectionModel
 import javax.swing.event.ChangeEvent
@@ -337,8 +337,30 @@ private class TableViewColumnInfo(
         return inMilliseconds - dateTimeFormat.timezoneOffsetMilliseconds
     }
 
-    private fun parseDateTime(raw: String): Long {
-        return OffsetDateTime.parse(raw).toInstant().toEpochMilli();
+    private fun parseDateTime(raw: String): Long? {
+        // If the DateTime ends with a Z or a time zone (e.g. +00:00), parse it
+        // If not, assume that it is in UTC (per SQLite convention) and append a Z before parsing it
+        val dateTimeRegex = Pattern.compile(
+            // The base part of the ISO String, up to minutes (mandatory)
+            "^(?<base>\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}" +
+                    // Optionally also include seconds and milliseconds in the base
+                    "(?::\\d{2}(?:\\.\\d+)?)?)" +
+                    // A valid suffix, like +05:00, Z, -03:00, +01, captured separately
+                    "(?<suffix>[+-][0-2]\\d(?::[0-5]\\d)?|Z)?$"
+        )
+        val matcher = dateTimeRegex.matcher(raw)
+        val hasMatch = matcher.find()
+
+        return if (!hasMatch) {
+            // Not a valid DateTime format at all
+            null
+        } else if (matcher.group("suffix") != null) {
+            // Already correctly formatted
+            OffsetDateTime.parse(raw).toInstant().toEpochMilli()
+        } else {
+            // Not correctly formatted yet, append a Z to the base to treat it as UTC
+            OffsetDateTime.parse(matcher.group("base") + "Z").toInstant().toEpochMilli()
+        }
     }
 
     override fun isCellEditable(item: TableRow): Boolean {
