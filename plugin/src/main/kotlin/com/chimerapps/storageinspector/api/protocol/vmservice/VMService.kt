@@ -4,7 +4,6 @@ import com.chimerapps.storageinspector.util.classLogger
 import com.google.gsonpackaged.Gson
 import com.google.gsonpackaged.JsonObject
 import com.google.gsonpackaged.JsonParser
-import com.intellij.diagnostic.ActivityImpl.listener
 import kotlinx.coroutines.CompletableDeferred
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
